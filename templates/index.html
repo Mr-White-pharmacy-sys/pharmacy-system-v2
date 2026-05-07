@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5">
+    <i class="fas fa-chart-line text-primary me-3"></i>
+    PENINSULA HOSPITAL CENTRE - Pharmacy Dashboard
+</h1>
+<p class="text-muted">
+    <i class="fas fa-map-marker-alt me-1"></i> No. 1 Macarthy Drive, Off Peninsula Road Tokeh, Freetown &nbsp;|&nbsp;
+    <i class="fas fa-phone me-1"></i> +23273475252
+</p>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4" id="statistics-cards">
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-primary shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                            Total Products
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-products">-</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-cubes fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                            Total Items in Stock
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-items">-</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-boxes fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                            Total Value (Nle)
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-value-nle">-</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-money-bill-wave fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-warning shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                            Total Value (USD)
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-value-usd">-</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Alert Cards -->
+<div class="row mb-4">
+    <div class="col-xl-4 col-md-6 mb-4">
+        <div class="card bg-danger text-white shadow">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col">
+                        <i class="fas fa-exclamation-triangle fa-2x"></i>
+                    </div>
+                    <div class="col text-right">
+                        <div class="h3 mb-0" id="expired-count">-</div>
+                        <div class="small">Expired Items</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-4 col-md-6 mb-4">
+        <div class="card bg-warning text-white shadow">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col">
+                        <i class="fas fa-clock fa-2x"></i>
+                    </div>
+                    <div class="col text-right">
+                        <div class="h3 mb-0" id="expiring-count">-</div>
+                        <div class="small">Expiring Soon</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-xl-4 col-md-6 mb-4">
+        <div class="card bg-success text-white shadow">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col">
+                        <i class="fas fa-exclamation-circle fa-2x"></i>
+                    </div>
+                    <div class="col text-right">
+                        <div class="h3 mb-0" id="low-stock-count">-</div>
+                        <div class="small">Low Stock Items</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Category Chart and Quick Actions -->
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-pie me-2"></i>Category Distribution
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="categoryChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-bolt me-2"></i>Quick Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('inventory') }}" class="btn btn-outline-primary btn-lg">
+                        <i class="fas fa-plus-circle me-2"></i>Add New Product
+                    </a>
+                    <a href="{{ url_for('pos') }}" class="btn btn-outline-success btn-lg">
+                        <i class="fas fa-cash-register me-2"></i>New Sale
+                    </a>
+                    <a href="{{ url_for('reports') }}" class="btn btn-outline-info btn-lg">
+                        <i class="fas fa-file-pdf me-2"></i>Generate Report
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let categoryChart = null;
+
+$(document).ready(function() {
+    loadStatistics();
+    setInterval(loadStatistics, 30000);
+});
+
+function loadStatistics() {
+    $.get('/api/statistics', function(data) {
+        $('#total-products').text(data.total_products);
+        $('#total-items').text(data.total_items);
+        $('#total-value-nle').text('Nle ' + numberWithCommas(data.total_value_nle));
+        $('#total-value-usd').text('$' + numberWithCommas(data.total_value_usd));
+        $('#expired-count').text(data.expired_count);
+        $('#expiring-count').text(data.expiring_soon_count);
+        $('#low-stock-count').text(data.low_stock_count);
+        
+        updateCategoryChart(data.categories);
+    });
+}
+
+function updateCategoryChart(categories) {
+    const ctx = document.getElementById('categoryChart').getContext('2d');
+    
+    if (categoryChart) {
+        categoryChart.destroy();
+    }
+    
+    categoryChart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: Object.keys(categories),
+            datasets: [{
+                data: Object.values(categories),
+                backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b']
+            }]
+        }
+    });
+}
+
+function numberWithCommas(x) {
+    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+</script>
+{% endblock %}

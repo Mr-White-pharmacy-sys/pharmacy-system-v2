@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5">
+            <i class="fas fa-users text-info me-3"></i>
+            User Management
+        </h1>
+        <p class="text-muted">Manage system users and permissions</p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Add User Form (Admin Only) -->
+    <div class="col-md-5 mb-4">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-user-plus me-2"></i>Add New User
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="addUserForm">
+                    <div class="mb-3">
+                        <label for="newUsername" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="newUsername" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="newPassword" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="newPassword" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="newRole" class="form-label">Role</label>
+                        <select class="form-control" id="newRole">
+                            <option value="cashier">Cashier</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                        <small class="text-muted">Admin: Full access | Cashier: Limited access</small>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-info w-100">
+                        <i class="fas fa-plus me-2"></i>Add User
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Change Password Card -->
+        <div class="card shadow mt-4">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">
+                    <i class="fas fa-key me-2"></i>Change My Password
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="changePasswordForm">
+                    <div class="mb-3">
+                        <label for="oldPassword" class="form-label">Current Password</label>
+                        <input type="password" class="form-control" id="oldPassword" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="newPasswordChange" class="form-label">New Password</label>
+                        <input type="password" class="form-control" id="newPasswordChange" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="confirmPassword" class="form-label">Confirm New Password</label>
+                        <input type="password" class="form-control" id="confirmPassword" required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-warning w-100">
+                        <i class="fas fa-save me-2"></i>Change Password
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Users List -->
+    <div class="col-md-7">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2"></i>System Users
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Role</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <tr>
+                                <td colspan="3" class="text-center">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card shadow mt-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-info-circle me-2"></i>Role Permissions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-crown text-warning me-2"></i>Admin</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-check text-success me-2"></i>Full system access</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Add/Edit/Delete users</li>
+                            <li><i class="fas fa-check text-success me-2"></i>View all reports</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Manage inventory</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Process sales (POS)</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Manage suppliers</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-user text-info me-2"></i>Cashier</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-check text-success me-2"></i>Process sales (POS)</li>
+                            <li><i class="fas fa-check text-success me-2"></i>View inventory</li>
+                            <li><i class="fas fa-check text-success me-2"></i>Search products</li>
+                            <li><i class="fas fa-times text-danger me-2"></i>Cannot add/edit products</li>
+                            <li><i class="fas fa-times text-danger me-2"></i>Cannot manage users</li>
+                            <li><i class="fas fa-times text-danger me-2"></i>Cannot access reports</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-edit me-2"></i>Edit User
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editUserForm">
+                    <input type="hidden" id="editUserId">
+                    <div class="mb-3">
+                        <label for="editUsername" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="editUsername">
+                    </div>
+                    <div class="mb-3">
+                        <label for="editPassword" class="form-label">New Password (leave blank to keep current)</label>
+                        <input type="password" class="form-control" id="editPassword">
+                    </div>
+                    <div class="mb-3" id="roleField">
+                        <label for="editRole" class="form-label">Role</label>
+                        <select class="form-control" id="editRole">
+                            <option value="cashier">Cashier</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveUserEdit()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let users = [];
+let currentUserRole = '{{ current_user.role }}';
+let currentUserId = {{ current_user.id }};
+
+$(document).ready(function() {
+    loadUsers();
+    
+    // Add user form submission
+    $('#addUserForm').on('submit', function(e) {
+        e.preventDefault();
+        addUser();
+    });
+    
+    // Change password form submission
+    $('#changePasswordForm').on('submit', function(e) {
+        e.preventDefault();
+        changePassword();
+    });
+});
+
+function loadUsers() {
+    $.get('/api/users', function(data) {
+        users = data;
+        displayUsers();
+    }).fail(function() {
+        $('#usersTableBody').html(`
+            <tr>
+                <td colspan="3" class="text-center text-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Failed to load users
+                </td>
+            </tr>
+        `);
+    });
+}
+
+function displayUsers() {
+    const tbody = $('#usersTableBody');
+    
+    if (users.length === 0) {
+        tbody.html(`
+            <tr>
+                <td colspan="3" class="text-center text-muted">
+                    <i class="fas fa-users fa-2x mb-2"></i>
+                    <p>No users found</p>
+                </td>
+            </tr>
+        `);
+        return;
+    }
+    
+    let html = '';
+    users.forEach(user => {
+        const isCurrent = user.is_current;
+        const roleBadge = user.role === 'admin' ? 
+            '<span class="badge bg-warning text-dark">Admin</span>' : 
+            '<span class="badge bg-info">Cashier</span>';
+        
+        html += `
+            <tr>
+                <td>
+                    <strong>${escapeHtml(user.username)}</strong>
+                    ${isCurrent ? '<span class="badge bg-success ms-2">You</span>' : ''}
+                </td>
+                <td>${roleBadge}</td>
+                <td>
+                    <button class="btn btn-sm btn-info me-1" onclick="openEditModal(${user.id})" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    ${(currentUserRole === 'admin' && !isCurrent) ? `
+                        <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id}, '${escapeHtml(user.username)}')" title="Delete">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    ` : ''}
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.html(html);
+}
+
+function addUser() {
+    const username = $('#newUsername').val().trim();
+    const password = $('#newPassword').val();
+    const role = $('#newRole').val();
+    
+    if (!username || !password) {
+        alert('Please fill in all fields');
+        return;
+    }
+    
+    if (password.length < 4) {
+        alert('Password must be at least 4 characters');
+        return;
+    }
+    
+    $.ajax({
+        url: '/api/users',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            username: username,
+            password: password,
+            role: role
+        }),
+        success: function(response) {
+            alert(response.message);
+            $('#newUsername').val('');
+            $('#newPassword').val('');
+            loadUsers();
+        },
+        error: function(xhr) {
+            alert(xhr.responseJSON?.error || 'Error creating user');
+        }
+    });
+}
+
+function openEditModal(userId) {
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+    
+    $('#editUserId').val(user.id);
+    $('#editUsername').val(user.username);
+    $('#editRole').val(user.role);
+    
+    // If current user is editing themselves and not admin, hide role field
+    if (currentUserRole !== 'admin' && userId === currentUserId) {
+        $('#roleField').hide();
+    } else {
+        $('#roleField').show();
+    }
+    
+    $('#editUserModal').modal('show');
+}
+
+function saveUserEdit() {
+    const userId = $('#editUserId').val();
+    const username = $('#editUsername').val().trim();
+    const password = $('#editPassword').val();
+    const role = $('#editRole').val();
+    
+    if (!username) {
+        alert('Username cannot be empty');
+        return;
+    }
+    
+    const data = { username: username };
+    if (password) {
+        if (password.length < 4) {
+            alert('Password must be at least 4 characters');
+            return;
+        }
+        data.password = password;
+    }
+    if (currentUserRole === 'admin') {
+        data.role = role;
+    }
+    
+    $.ajax({
+        url: `/api/users/${userId}`,
+        method: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            alert(response.message);
+            $('#editUserModal').modal('hide');
+            $('#editPassword').val('');
+            loadUsers();
+            
+            // If current user changed their own username, refresh page
+            if (parseInt(userId) === currentUserId && data.username) {
+                location.reload();
+            }
+        },
+        error: function(xhr) {
+            alert(xhr.responseJSON?.error || 'Error updating user');
+        }
+    });
+}
+
+function deleteUser(userId, username) {
+    if (confirm(`Are you sure you want to delete user "${username}"? This action cannot be undone.`)) {
+        $.ajax({
+            url: `/api/users/${userId}`,
+            method: 'DELETE',
+            success: function(response) {
+                alert(response.message);
+                loadUsers();
+            },
+            error: function(xhr) {
+                alert(xhr.responseJSON?.error || 'Error deleting user');
+            }
+        });
+    }
+}
+
+function changePassword() {
+    const oldPassword = $('#oldPassword').val();
+    const newPassword = $('#newPasswordChange').val();
+    const confirmPassword = $('#confirmPassword').val();
+    
+    if (!oldPassword || !newPassword) {
+        alert('Please fill in all fields');
+        return;
+    }
+    
+    if (newPassword.length < 4) {
+        alert('New password must be at least 4 characters');
+        return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+        alert('New passwords do not match');
+        return;
+    }
+    
+    $.ajax({
+        url: '/api/change_password',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            old_password: oldPassword,
+            new_password: newPassword
+        }),
+        success: function(response) {
+            alert(response.message);
+            $('#oldPassword').val('');
+            $('#newPasswordChange').val('');
+            $('#confirmPassword').val('');
+        },
+        error: function(xhr) {
+            alert(xhr.responseJSON?.error || 'Error changing password');
+        }
+    });
+}
+
+function escapeHtml(text) {
+    if (!text) return text;
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

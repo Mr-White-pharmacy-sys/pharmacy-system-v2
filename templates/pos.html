@@ -1,0 +1,601 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5">
+            <i class="fas fa-cash-register text-success me-3"></i>
+            Point of Sale (POS)
+        </h1>
+        <p class="text-muted">Sell products and generate receipts</p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Left Column: Product Search -->
+    <div class="col-md-7">
+        <div class="card shadow mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-search me-2"></i>Search Products
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="input-group mb-3">
+                    <span class="input-group-text bg-success text-white">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" class="form-control form-control-lg" id="productSearch" 
+                           placeholder="Search by name or SCAN BARCODE with scanner...">
+                    <button class="btn btn-info" type="button" onclick="scanBarcode()">
+                        <i class="fas fa-camera"></i> Camera
+                    </button>
+                </div>
+                <div class="mb-3">
+                    <small class="text-muted">
+                        <i class="fas fa-qrcode me-1"></i> 
+                        <strong>Pro Tip:</strong> Click in the search box, then scan any product barcode. The product will appear instantly!
+                    </small>
+                </div>
+                
+                <div id="searchResults" class="list-group" style="max-height: 400px; overflow-y: auto;">
+                    <div class="text-center text-muted p-5">
+                        <i class="fas fa-search fa-3x mb-3"></i>
+                        <p>Start typing to search for products</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Right Column: Shopping Cart -->
+    <div class="col-md-5">
+        <div class="card shadow mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-shopping-cart me-2"></i>Shopping Cart
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="cartItems" style="max-height: 400px; overflow-y: auto;">
+                    <div class="text-center text-muted p-5">
+                        <i class="fas fa-cart-plus fa-3x mb-3"></i>
+                        <p>Cart is empty</p>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row mb-2">
+                    <div class="col-8"><strong>Subtotal:</strong></div>
+                    <div class="col-4 text-end"><span id="subtotalNle">0</span> Nle</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-8"><strong>Tax (0%):</strong></div>
+                    <div class="col-4 text-end"><span id="taxNle">0</span> Nle</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-8"><strong class="h5">Total:</strong></div>
+                    <div class="col-4 text-end"><strong class="h5 text-success" id="totalNle">0</strong> Nle</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-8"><strong>Total (USD):</strong></div>
+                    <div class="col-4 text-end"><span id="totalUsd">$0.00</span></div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-12">
+                        <label><strong>Payment Method:</strong></label>
+                        <select class="form-control" id="paymentMethod">
+                            <option value="Cash">Cash</option>
+                            <option value="Card">Card</option>
+                            <option value="Mobile Money">Mobile Money</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <button class="btn btn-success w-100 btn-lg" onclick="processPayment()">
+                    <i class="fas fa-credit-card me-2"></i>Process Payment
+                </button>
+                <button class="btn btn-secondary w-100 mt-2" onclick="clearCart()">
+                    <i class="fas fa-trash me-2"></i>Clear Cart
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Receipt Modal -->
+<div class="modal fade" id="receiptModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-receipt me-2"></i>Payment Receipt
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="receiptContent">
+                <!-- Receipt will be displayed here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="printReceipt()">
+                    <i class="fas fa-print me-2"></i>Print Receipt
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Barcode Scanner Modal -->
+<div class="modal fade" id="scannerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-camera me-2"></i>Scan Barcode
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <video id="scanner" width="100%" height="auto" style="border: 2px solid #ccc; border-radius: 10px;"></video>
+                <div id="scanner-result" class="mt-3"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let cart = [];
+let products = [];
+let searchTimeout = null;
+let scanner = null;
+
+$(document).ready(function() {
+    loadProducts();
+    
+    // Setup search with debounce
+    $('#productSearch').on('keyup', function() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            searchProducts();
+        }, 300);
+    });
+});
+
+// Load products from API
+function loadProducts() {
+    $.get('/api/products', function(data) {
+        products = data;
+        console.log('Products loaded:', products.length);
+    }).fail(function() {
+        showNotification('Failed to load products. Please refresh.', 'danger');
+    });
+}
+
+// Search and display products
+function searchProducts() {
+    const query = $('#productSearch').val().toLowerCase().trim();
+    
+    if (query.length < 2) {
+        $('#searchResults').html(`
+            <div class="text-center text-muted p-5">
+                <i class="fas fa-search fa-3x mb-3"></i>
+                <p>Type at least 2 characters to search</p>
+            </div>
+        `);
+        return;
+    }
+    
+    const filtered = products.filter(p => 
+        p.name.toLowerCase().includes(query) || 
+        (p.barcode && p.barcode.toLowerCase().includes(query))
+    );
+    
+    if (filtered.length === 0) {
+        $('#searchResults').html(`
+            <div class="text-center text-muted p-5">
+                <i class="fas fa-box-open fa-3x mb-3"></i>
+                <p>No products found</p>
+            </div>
+        `);
+        return;
+    }
+    
+    let html = '';
+    filtered.forEach(product => {
+        const outOfStock = product.quantity <= 0;
+        html += `
+            <div class="list-group-item ${outOfStock ? 'bg-danger text-white' : ''}">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>${escapeHtml(product.name)}</strong><br>
+                        <small>Price: Nle ${formatNumber(product.price_nle)} | Stock: ${product.quantity}</small>
+                    </div>
+                    <button class="btn btn-sm btn-success" 
+                            onclick="addToCart(${product.id})"
+                            ${outOfStock ? 'disabled' : ''}>
+                        <i class="fas fa-cart-plus"></i> Add
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    
+    $('#searchResults').html(html);
+}
+
+// Add product to cart
+function addToCart(productId) {
+    const product = products.find(p => p.id === productId);
+    
+    if (!product || product.quantity <= 0) {
+        showNotification('Product out of stock!', 'danger');
+        return;
+    }
+    
+    const existingItem = cart.find(item => item.id === productId);
+    
+    if (existingItem) {
+        if (existingItem.quantity + 1 > product.quantity) {
+            showNotification('Not enough stock!', 'warning');
+            return;
+        }
+        existingItem.quantity++;
+        existingItem.total_nle = existingItem.price_nle * existingItem.quantity;
+        existingItem.total_usd = existingItem.price_usd * existingItem.quantity;
+    } else {
+        cart.push({
+            id: product.id,
+            name: product.name,
+            price_nle: product.price_nle,
+            price_usd: product.price_usd,
+            quantity: 1,
+            total_nle: product.price_nle,
+            total_usd: product.price_usd
+        });
+    }
+    
+    updateCartDisplay();
+    showNotification(`${product.name} added to cart!`, 'success');
+}
+
+// Update cart UI and totals
+function updateCartDisplay() {
+    if (cart.length === 0) {
+        $('#cartItems').html(`
+            <div class="text-center text-muted p-5">
+                <i class="fas fa-cart-plus fa-3x mb-3"></i>
+                <p>Cart is empty</p>
+            </div>
+        `);
+        $('#subtotalNle').text('0');
+        $('#taxNle').text('0');
+        $('#totalNle').text('0');
+        $('#totalUsd').text('$0.00');
+        return;
+    }
+    
+    let html = '';
+    let subtotalNle = 0;
+    let subtotalUsd = 0;
+    
+    cart.forEach((item, index) => {
+        subtotalNle += item.total_nle;
+        subtotalUsd += item.total_usd;
+        
+        html += `
+            <div class="cart-item mb-2 p-2 border rounded">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="flex-grow-1">
+                        <strong>${escapeHtml(item.name)}</strong><br>
+                        <small>Nle ${formatNumber(item.price_nle)} each</small>
+                    </div>
+                    <div class="text-end">
+                        <div class="input-group input-group-sm mb-2">
+                            <button class="btn btn-outline-secondary" onclick="updateQuantity(${index}, -1)">-</button>
+                            <input type="number" class="form-control text-center" value="${item.quantity}" 
+                                   style="width: 60px;" onchange="setQuantity(${index}, this.value)">
+                            <button class="btn btn-outline-secondary" onclick="updateQuantity(${index}, 1)">+</button>
+                        </div>
+                        <div><strong>Nle ${formatNumber(item.total_nle)}</strong></div>
+                        <button class="btn btn-sm btn-danger mt-1" onclick="removeFromCart(${index})">
+                            <i class="fas fa-trash"></i> Remove
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    const taxNle = 0;
+    const totalNle = subtotalNle + taxNle;
+    const totalUsd = subtotalUsd;
+    
+    $('#cartItems').html(html);
+    $('#subtotalNle').text(formatNumber(subtotalNle));
+    $('#taxNle').text(formatNumber(taxNle));
+    $('#totalNle').text(formatNumber(totalNle));
+    $('#totalUsd').text('$' + formatNumber(totalUsd));
+}
+
+function updateQuantity(index, change) {
+    const item = cart[index];
+    const product = products.find(p => p.id === item.id);
+    
+    let newQuantity = item.quantity + change;
+    
+    if (newQuantity < 1) {
+        removeFromCart(index);
+        return;
+    }
+    
+    if (newQuantity > product.quantity) {
+        showNotification(`Only ${product.quantity} in stock!`, 'warning');
+        return;
+    }
+    
+    item.quantity = newQuantity;
+    item.total_nle = item.price_nle * item.quantity;
+    item.total_usd = item.price_usd * item.quantity;
+    
+    updateCartDisplay();
+}
+
+function setQuantity(index, value) {
+    let newQuantity = parseInt(value);
+    if (isNaN(newQuantity) || newQuantity < 1) {
+        newQuantity = 1;
+    }
+    
+    const item = cart[index];
+    const product = products.find(p => p.id === item.id);
+    
+    if (newQuantity > product.quantity) {
+        showNotification(`Only ${product.quantity} in stock!`, 'warning');
+        newQuantity = product.quantity;
+    }
+    
+    item.quantity = newQuantity;
+    item.total_nle = item.price_nle * item.quantity;
+    item.total_usd = item.price_usd * item.quantity;
+    
+    updateCartDisplay();
+}
+
+function removeFromCart(index) {
+    const removed = cart.splice(index, 1)[0];
+    updateCartDisplay();
+    showNotification(`${removed.name} removed from cart`, 'info');
+}
+
+function clearCart() {
+    if (cart.length > 0 && confirm('Clear entire cart?')) {
+        cart = [];
+        updateCartDisplay();
+        showNotification('Cart cleared', 'info');
+    }
+}
+
+function processPayment() {
+    if (cart.length === 0) {
+        showNotification('Cart is empty!', 'warning');
+        return;
+    }
+    
+    const paymentMethod = $('#paymentMethod').val();
+    const totalNle = parseFloat($('#totalNle').text().replace(/,/g, ''));
+    const totalUsd = parseFloat($('#totalUsd').text().replace('$', '').replace(/,/g, ''));
+    
+    const saleData = {
+        items: cart.map(item => ({
+            name: item.name,
+            quantity: item.quantity,
+            price_nle: item.price_nle,
+            total_nle: item.total_nle
+        })),
+        subtotal_nle: parseFloat($('#subtotalNle').text().replace(/,/g, '')),
+        subtotal_usd: totalUsd, // simpler
+        total_nle: totalNle,
+        total_usd: totalUsd,
+        payment_method: paymentMethod
+    };
+    
+    $.ajax({
+        url: '/api/sales',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(saleData),
+        success: function(response) {
+            showNotification('Payment successful! Receipt saved.', 'success');
+            displayReceipt(saleData, response.receipt_number);
+            cart = [];
+            updateCartDisplay();
+            loadProducts(); // Refresh stock levels
+        },
+        error: function(xhr) {
+            showNotification('Error processing payment: ' + (xhr.responseJSON?.message || 'Unknown error'), 'danger');
+        }
+    });
+}
+
+function displayReceipt(saleData, receiptNumber) {
+    const now = new Date();
+    const dateStr = now.toLocaleString();
+    
+    let itemsHtml = '';
+    saleData.items.forEach(item => {
+        itemsHtml += `
+            <tr>
+                <td>${escapeHtml(item.name)}</td>
+                <td class="text-center">${item.quantity}</td>
+                <td class="text-end">Nle ${formatNumber(item.price_nle)}</td>
+                <td class="text-end">Nle ${formatNumber(item.total_nle)}</td>
+            </tr>
+        `;
+    });
+    
+    const receiptHtml = `
+        <div class="receipt p-3" style="font-family: 'Courier New', monospace;">
+            <div class="text-center mb-3">
+                <h4>PENINSULA HOSPITAL CENTRE</h4>
+                <p>No. 1 Macarthy Drive, Off Peninsula Road Tokeh, Freetown<br>
+                Mobile: +23273475252<br>
+                ${dateStr}<br>
+                Receipt: ${receiptNumber}</p>
+                <hr>
+            </div>
+            
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th class="text-center">Qty</th>
+                        <th class="text-end">Price</th>
+                        <th class="text-end">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${itemsHtml}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="3" class="text-end"><strong>Subtotal:</strong></td>
+                        <td class="text-end"><strong>Nle ${formatNumber(saleData.subtotal_nle)}</strong></td>
+                    </tr>
+                    <tr>
+                        <td colspan="3" class="text-end"><strong>Tax:</strong></td>
+                        <td class="text-end">Nle 0</td>
+                    </tr>
+                    <tr>
+                        <td colspan="3" class="text-end"><strong>Total:</strong></td>
+                        <td class="text-end"><strong>Nle ${formatNumber(saleData.total_nle)}</strong></td>
+                    </tr>
+                    <tr>
+                        <td colspan="4" class="text-end"><strong>USD: $${formatNumber(saleData.total_usd)}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+            
+            <hr>
+            <div class="text-center">
+                <p>Payment Method: ${saleData.payment_method}<br>
+                Thank you for your purchase!<br>
+                <small>Please check expiry dates before use</small></p>
+            </div>
+        </div>
+    `;
+    
+    $('#receiptContent').html(receiptHtml);
+    $('#receiptModal').modal('show');
+}
+
+// Unified print receipt function (only one)
+function printReceipt() {
+    const receiptContent = document.getElementById('receiptContent').innerHTML;
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Pharmacy Receipt</title>
+            <style>
+                body {
+                    font-family: 'Courier New', monospace;
+                    width: 58mm;
+                    margin: 2mm auto;
+                    padding: 0;
+                    background: white;
+                }
+                .receipt {
+                    font-size: 10pt;
+                }
+                @media print {
+                    .no-print { display: none; }
+                    body { margin: 0; }
+                }
+            </style>
+        </head>
+        <body>
+            ${receiptContent}
+            <div class="no-print text-center mt-4">
+                <button onclick="window.print()">Print</button>
+                <button onclick="window.close()">Close</button>
+            </div>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
+}
+
+function scanBarcode() {
+    $('#scannerModal').modal('show');
+    
+    if (!scanner && typeof Quagga !== 'undefined') {
+        Quagga.init({
+            inputStream: {
+                name: "Live",
+                type: "LiveStream",
+                target: document.querySelector('#scanner')
+            },
+            decoder: {
+                readers: ["ean_reader", "ean_8_reader", "code_128_reader"]
+            }
+        }, function(err) {
+            if (err) {
+                $('#scanner-result').html('<div class="alert alert-danger">Error starting scanner. Check camera permissions.</div>');
+                return;
+            }
+            Quagga.start();
+        });
+        
+        Quagga.onDetected(function(result) {
+            const code = result.codeResult.code;
+            $('#scanner-result').html(`<div class="alert alert-success">Scanned: ${code}</div>`);
+            $('#productSearch').val(code);
+            searchProducts(); // Trigger search immediately
+            
+            Quagga.stop();
+            setTimeout(() => {
+                $('#scannerModal').modal('hide');
+                $('#scanner-result').empty();
+            }, 1500);
+        });
+        
+        scanner = Quagga;
+    }
+}
+
+function showNotification(message, type) {
+    // Simple alert – you can upgrade to toast later
+    alert(message);
+}
+
+function formatNumber(num) {
+    return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function escapeHtml(text) {
+    if (!text) return text;
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+$('#scannerModal').on('hidden.bs.modal', function() {
+    if (scanner) {
+        scanner.stop();
+        scanner = null;
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5">
+            <i class="fas fa-chart-line text-info me-3"></i>
+            Advanced Analytics
+        </h1>
+        <p class="text-muted">Sales performance, category insights & inventory forecasting</p>
+    </div>
+</div>
+
+<!-- KPI Cards Row -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card border-left-primary shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                            Total Sales (30 days)
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalSales30">-</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-chart-line fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                            Transactions (30 days)
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="transactions30">-</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-receipt fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                            Avg. Transaction Value
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="avgTransaction">-</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-calculator fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-left-warning shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                            Low Stock Items
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="lowStockCount">-</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-exclamation-triangle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Sales Trend (Last 30 Days)</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="salesTrendChart" style="max-height: 300px; width: 100%;"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Category Distribution</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="categoryChart" style="max-height: 300px; width: 100%;"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Expiry Forecast Table -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Expiry Forecast (Next 90 Days)</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Product Name</th>
+                                <th>Expiry Date</th>
+                                <th>Days Left</th>
+                                <th>Current Quantity</th>
+                                <th>Projected Loss (Nle)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expiryForecastBody">
+                            <tr>
+                                <td colspan="5" class="text-center">Loading forecast...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Wait for DOM & Chart.js to load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadAnalyticsData();
+    });
+
+    async function loadAnalyticsData() {
+        try {
+            // 1. Fetch KPIs & sales trend
+            const salesTrendResp = await fetch('/api/analytics/sales_trend');
+            const trendData = await salesTrendResp.json();
+
+            // 2. Update KPI cards
+            const totalSales30Elem = document.getElementById('totalSales30');
+            const transactions30Elem = document.getElementById('transactions30');
+            const avgTransactionElem = document.getElementById('avgTransaction');
+
+            if (totalSales30Elem) totalSales30Elem.innerText = `Nle ${(trendData.total_sales_30 || 0).toLocaleString()}`;
+            if (transactions30Elem) transactions30Elem.innerText = trendData.transactions_30 || 0;
+            if (avgTransactionElem && trendData.avg_transaction) avgTransactionElem.innerText = `Nle ${(trendData.avg_transaction).toLocaleString()}`;
+
+            // 3. Render sales line chart
+            if (trendData.dates && trendData.amounts) {
+                const ctx = document.getElementById('salesTrendChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: trendData.dates,
+                        datasets: [{
+                            label: 'Daily Sales (Nle)',
+                            data: trendData.amounts,
+                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(52,152,219,0.1)',
+                            fill: true,
+                            tension: 0.3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `Nle ${context.raw.toLocaleString()}`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // 4. Fetch category distribution
+            const categoryResp = await fetch('/api/statistics');
+            const categoryData = await categoryResp.json();
+
+            if (categoryData.categories) {
+                const catCtx = document.getElementById('categoryChart').getContext('2d');
+                new Chart(catCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(categoryData.categories),
+                        datasets: [{
+                            data: Object.values(categoryData.categories),
+                            backgroundColor: ['#3498db','#2ecc71','#f1c40f','#e74c3c','#9b59b6','#1abc9c','#e67e22']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true
+                    }
+                });
+            }
+
+            // 5. Update low stock KPI
+            const lowStockElem = document.getElementById('lowStockCount');
+            if (lowStockElem && categoryData.low_stock_count !== undefined) {
+                lowStockElem.innerText = categoryData.low_stock_count;
+            }
+
+            // 6. Load expiry forecast
+            const expiryResp = await fetch('/api/analytics/expiry_forecast');
+            const expiryData = await expiryResp.json();
+
+            const tbody = document.getElementById('expiryForecastBody');
+            if (expiryData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center">No products expiring in the next 90 days.</td></tr>`;
+            } else {
+                tbody.innerHTML = expiryData.map(item => `
+                    <tr>
+                        <td><strong>${escapeHtml(item.name)}</strong></td>
+                        <td>${item.expiry_date}</td>
+                        <td><span class="badge ${item.days_left <= 30 ? 'bg-danger' : 'bg-warning'}">${item.days_left} days</span></td>
+                        <td>${item.quantity}</td>
+                        <td>Nle ${item.projected_loss.toLocaleString()}</td>
+                    </tr>
+                `).join('');
+            }
+
+        } catch (error) {
+            console.error('Error loading analytics data:', error);
+            showNotification('Could not load analytics data', 'danger');
+        }
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+</script>
+{% endblock %}
