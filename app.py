@@ -17,34 +17,33 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.lib.units import inch
 from flask_mail import Mail, Message
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import threading
+import schedule
+import time
 
 # Initialize Flask app
 app = Flask(__name__)
+
 # Email Configuration
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'  # or your email provider
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'your-email@gmail.com'  # Replace with your email
-app.config['MAIL_PASSWORD'] = 'your-app-password'  # Use app-specific password
+app.config['MAIL_USERNAME'] = 'your-email@gmail.com'      # Replace with your email
+app.config['MAIL_PASSWORD'] = 'your-app-password'        # Replace with app password
 mail = Mail(app)
 
-# SMS Configuration (Twilio - get free trial)
-# Sign up at twilio.com for free credits
+# SMS Configuration (Twilio - optional; set real values later)
 TWILIO_ACCOUNT_SID = 'your_account_sid'
 TWILIO_AUTH_TOKEN = 'your_auth_token'
 TWILIO_PHONE_NUMBER = '+1234567890'
-ALERT_PHONE_NUMBER = '+23276566295'  # Your pharmacy number
+ALERT_PHONE_NUMBER = '+23276566295'
+
 app.config['SECRET_KEY'] = 'mr-white-pharmacy-secret-key-2024'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///pharmacy.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///pharmacy.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['RECEIPT_FOLDER'] = 'receipts'
 
-# Create folders if they don't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['RECEIPT_FOLDER'], exist_ok=True)
 
@@ -56,7 +55,6 @@ login_manager.login_view = 'login'
 # ============================================
 # DATABASE MODELS
 # ============================================
-
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -116,12 +114,9 @@ def load_user(user_id):
 # ============================================
 # HELPER FUNCTIONS
 # ============================================
-
 def get_product_status(product):
-    """Determine product status based on expiry and stock"""
     today = datetime.now().date()
     days_to_expiry = (product.expiry_date - today).days
-    
     if today > product.expiry_date:
         return 'expired'
     elif days_to_expiry <= 30:
@@ -132,15 +127,11 @@ def get_product_status(product):
         return 'normal'
 
 def generate_receipt_pdf(sale, items):
-    """Generate PDF receipt for a sale"""
     filename = f"receipt_{sale.receipt_number}.pdf"
     filepath = os.path.join(app.config['RECEIPT_FOLDER'], filename)
-    
     doc = SimpleDocTemplate(filepath, pagesize=letter)
     styles = getSampleStyleSheet()
     story = []
-    
-    # Header
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
@@ -148,8 +139,6 @@ def generate_receipt_pdf(sale, items):
         textColor=colors.HexColor('#2c3e50'),
         alignment=1
     )
-    
-    # Hospital Information
     story.append(Paragraph("PENINSULA HOSPITAL CENTRE", title_style))
     story.append(Paragraph("No. 1 Macarthy Drive, Off Peninsula Road Tokeh, Freetown", styles['Normal']))
     story.append(Paragraph("Tel: +23273475252", styles['Normal']))
@@ -158,7 +147,6 @@ def generate_receipt_pdf(sale, items):
     story.append(Paragraph(f"Date: {sale.created_at.strftime('%Y-%m-%d %H:%M')}", styles['Normal']))
     story.append(Spacer(1, 0.3 * inch))
     
-    # Items table
     table_data = [['Item', 'Qty', 'Price', 'Total']]
     for item in items:
         table_data.append([
@@ -167,8 +155,6 @@ def generate_receipt_pdf(sale, items):
             f"Nle {item['price_nle']:,.2f}",
             f"Nle {item['total_nle']:,.2f}"
         ])
-    
-    # Totals
     table_data.append(['', '', 'Subtotal:', f"Nle {sale.subtotal_nle:,.2f}"])
     table_data.append(['', '', 'Tax (0%):', "Nle 0.00"])
     table_data.append(['', '', 'Total:', f"Nle {sale.total_nle:,.2f}"])
@@ -187,77 +173,52 @@ def generate_receipt_pdf(sale, items):
         ('BACKGROUND', (0, -3), (-1, -1), colors.HexColor('#f0f0f0')),
         ('FONTNAME', (0, -3), (-1, -1), 'Helvetica-Bold'),
     ]))
-    
     story.append(table)
     story.append(Spacer(1, 0.3 * inch))
-    
-    # Footer
     story.append(Paragraph("Thank you for your purchase!", styles['Normal']))
     story.append(Paragraph("Please check expiry dates before use", styles['Normal']))
-    
     doc.build(story)
     return filepath
 
-    # ============================================
-# STOCK ALERT FUNCTIONS
 # ============================================
-
-import threading
-
+# STOCK ALERT FUNCTIONS (Optional)
+# ============================================
 def check_low_stock_alerts():
-    """Check for low stock products and send alerts"""
     products = Product.query.all()
     low_stock_items = [p for p in products if p.quantity < p.low_stock_threshold]
-    
     if not low_stock_items:
         return
-    
-    # Prepare email content
     subject = "⚠️ LOW STOCK ALERT - Pharmacy System"
     body = "The following products are running low:\n\n"
     for item in low_stock_items:
         body += f"- {item.name}: Only {item.quantity} left (Threshold: {item.low_stock_threshold})\n"
-    
-    # Send email
     send_email_async(subject, body)
-    
-    # Send SMS (if configured)
-    send_sms_async(body[:160])  # SMS limited to 160 chars
+    send_sms_async(body[:160])
 
 def send_email_async(subject, body):
-    """Send email in background thread"""
     def send():
         try:
-            msg = Message(subject, 
-                         sender=app.config['MAIL_USERNAME'],
-                         recipients=['manager@phc.sl', 'admin@phc.sl'])
+            msg = Message(subject, sender=app.config['MAIL_USERNAME'], recipients=['manager@phc.sl', 'admin@phc.sl'])
             msg.body = body
             mail.send(msg)
             print("Stock alert email sent")
         except Exception as e:
             print(f"Email error: {e}")
-    
     thread = threading.Thread(target=send)
     thread.start()
 
 def send_sms_async(message):
-    """Send SMS using Twilio"""
     try:
         from twilio.rest import Client
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        client.messages.create(
-            body=message,
-            from_=TWILIO_PHONE_NUMBER,
-            to=ALERT_PHONE_NUMBER
-        )
+        client.messages.create(body=message, from_=TWILIO_PHONE_NUMBER, to=ALERT_PHONE_NUMBER)
         print("SMS alert sent")
     except Exception as e:
         print(f"SMS error: {e}")
 
 # ============================================
-# ROUTES - PAGE RENDERING
+# PAGE ROUTES
 # ============================================
-
 @app.route('/')
 def index():
     return redirect(url_for('login'))
@@ -268,13 +229,10 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         user = User.query.filter_by(username=username).first()
-        
         if user and user.check_password(password):
             login_user(user)
             return redirect(url_for('dashboard'))
-        
         flash('Invalid username or password', 'error')
-    
     return render_template('login.html')
 
 @app.route('/logout')
@@ -314,9 +272,8 @@ def reports():
     return render_template('reports.html')
 
 # ============================================
-# API ROUTES - PRODUCTS
+# API ROUTES – PRODUCTS
 # ============================================
-
 @app.route('/api/products', methods=['GET'])
 @login_required
 def get_products():
@@ -343,15 +300,10 @@ def get_products():
 @login_required
 def add_product():
     data = request.json
-    
-    # Convert USD price (exchange rate 1 USD = 22 Nle)
     usd_price = data['price_nle'] / 22
-    
-    # Generate barcode if not provided
     barcode_value = data.get('barcode')
     if not barcode_value:
         barcode_value = f"PH{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    
     new_product = Product(
         product_id=data['product_id'],
         name=data['name'],
@@ -363,10 +315,8 @@ def add_product():
         category=data.get('category'),
         barcode=barcode_value
     )
-    
     db.session.add(new_product)
     db.session.commit()
-    
     return jsonify({'success': True, 'message': 'Product added successfully'})
 
 @app.route('/api/products/<int:product_id>', methods=['PUT'])
@@ -374,7 +324,6 @@ def add_product():
 def update_product(product_id):
     product = Product.query.get_or_404(product_id)
     data = request.json
-    
     product.name = data.get('name', product.name)
     product.price_nle = data.get('price_nle', product.price_nle)
     product.price_usd = data.get('price_nle', product.price_nle) / 22
@@ -383,7 +332,6 @@ def update_product(product_id):
         product.expiry_date = datetime.strptime(data['expiry_date'], '%Y-%m-%d').date()
     product.manufacturer = data.get('manufacturer', product.manufacturer)
     product.category = data.get('category', product.category)
-    
     db.session.commit()
     return jsonify({'success': True, 'message': 'Product updated successfully'})
 
@@ -404,7 +352,6 @@ def search_products():
         (Product.product_id.contains(query)) |
         (Product.barcode.contains(query))
     ).all()
-    
     return jsonify([{
         'id': p.id,
         'product_id': p.product_id,
@@ -417,30 +364,22 @@ def search_products():
     } for p in products])
 
 # ============================================
-# API ROUTES - STATISTICS
+# API ROUTES – STATISTICS
 # ============================================
-
 @app.route('/api/statistics')
 @login_required
 def get_statistics():
     products = Product.query.all()
-    
     total_items = sum(p.quantity for p in products)
     total_value_nle = sum(p.price_nle * p.quantity for p in products)
     total_value_usd = total_value_nle / 22
-    
     categories = {}
     for p in products:
         if p.category:
-            if p.category in categories:
-                categories[p.category] += p.quantity
-            else:
-                categories[p.category] = p.quantity
-    
+            categories[p.category] = categories.get(p.category, 0) + p.quantity
     expired_count = sum(1 for p in products if p.expiry_date < datetime.now().date())
     expiring_soon_count = sum(1 for p in products if 0 <= (p.expiry_date - datetime.now().date()).days <= 30)
     low_stock_count = sum(1 for p in products if p.quantity < p.low_stock_threshold)
-    
     return jsonify({
         'total_products': len(products),
         'total_items': total_items,
@@ -453,29 +392,21 @@ def get_statistics():
     })
 
 # ============================================
-# API ROUTES - SALES (POS)
+# API ROUTES – SALES (POS)
 # ============================================
-
 @app.route('/api/sales', methods=['POST'])
 @login_required
 def create_sale():
     try:
         data = request.json
-        
         receipt_number = f"RCP{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
-        # Update inventory and validate stock
         for item in data['items']:
             product = Product.query.filter_by(name=item['name']).first()
             if not product:
                 return jsonify({'error': f'Product {item["name"]} not found'}), 400
-            
             if product.quantity < item['quantity']:
                 return jsonify({'error': f'Not enough stock for {product.name}. Available: {product.quantity}'}), 400
-            
             product.quantity -= item['quantity']
-        
-        # Create sale record
         sale = Sale(
             receipt_number=receipt_number,
             items=json.dumps(data['items']),
@@ -486,34 +417,23 @@ def create_sale():
             payment_method=data['payment_method'],
             user_id=current_user.id
         )
-        
         db.session.add(sale)
         db.session.commit()
-        
-        # Generate receipt PDF
         generate_receipt_pdf(sale, data['items'])
-        
-        return jsonify({
-            'success': True,
-            'receipt_number': receipt_number,
-            'message': 'Sale completed successfully'
-        })
-        
+        return jsonify({'success': True, 'receipt_number': receipt_number, 'message': 'Sale completed successfully'})
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
 # ============================================
-# API ROUTES - REPORTS
+# API ROUTES – REPORTS
 # ============================================
-
 @app.route('/api/reports/<report_type>')
 @login_required
 def generate_report(report_type):
     format_type = request.args.get('format', 'json')
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
-    
     if report_type == 'inventory':
         data = generate_inventory_report()
     elif report_type == 'sales':
@@ -524,7 +444,6 @@ def generate_report(report_type):
         data = generate_supplier_report()
     else:
         return jsonify({'error': 'Invalid report type'}), 400
-    
     if format_type == 'csv':
         return export_to_csv(data, report_type)
     elif format_type == 'pdf':
@@ -554,7 +473,6 @@ def generate_sales_report(start_date, end_date):
         query = query.filter(Sale.created_at >= datetime.strptime(start_date, '%Y-%m-%d'))
     if end_date:
         query = query.filter(Sale.created_at <= datetime.strptime(end_date, '%Y-%m-%d'))
-    
     sales = query.all()
     return [{
         'Receipt Number': s.receipt_number,
@@ -568,7 +486,6 @@ def generate_sales_report(start_date, end_date):
 def generate_expiry_report():
     today = datetime.now().date()
     thirty_days = today + timedelta(days=30)
-    
     products = Product.query.filter(Product.expiry_date <= thirty_days).all()
     return [{
         'Product ID': p.product_id,
@@ -592,30 +509,21 @@ def generate_supplier_report():
 def export_to_csv(data, filename):
     si = BytesIO()
     if data:
-        import csv
         cw = csv.writer(si)
         cw.writerow(data[0].keys())
         for row in data:
             cw.writerow(row.values())
-    
     si.seek(0)
-    return send_file(
-        si,
-        mimetype='text/csv',
-        as_attachment=True,
-        download_name=f'{filename}_report.csv'
-    )
+    return send_file(si, mimetype='text/csv', as_attachment=True, download_name=f'{filename}_report.csv')
 
 def export_to_pdf(data, filename):
     buffer = BytesIO()
     from reportlab.pdfgen import canvas
     c = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
-    
     c.setFont("Helvetica-Bold", 16)
     c.drawString(50, height - 50, f"{filename.title()} Report")
     c.setFont("Helvetica", 10)
-    
     y = height - 80
     if data:
         headers = list(data[0].keys())
@@ -623,7 +531,6 @@ def export_to_pdf(data, filename):
         for header in headers:
             c.drawString(x, y, str(header)[:15])
             x += 100
-        
         y -= 20
         for row in data:
             x = 50
@@ -635,65 +542,25 @@ def export_to_pdf(data, filename):
             if y < 50:
                 c.showPage()
                 y = height - 50
-    
     c.save()
     buffer.seek(0)
-    return send_file(
-        buffer,
-        mimetype='application/pdf',
-        as_attachment=True,
-        download_name=f'{filename}_report.pdf'
-    )
+    return send_file(buffer, mimetype='application/pdf', as_attachment=True, download_name=f'{filename}_report.pdf')
 
 def export_to_excel(data, filename):
     df = pd.DataFrame(data)
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name=filename)
-    
     output.seek(0)
-    return send_file(
-        output,
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        as_attachment=True,
-        download_name=f'{filename}_report.xlsx'
-    )
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True, download_name=f'{filename}_report.xlsx')
 
 # ============================================
-# API ROUTE - MANUAL STOCK ALERT
-# ============================================
-
-@app.route('/api/check_low_stock', methods=['POST'])
-@login_required
-def manual_stock_check():
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Access denied'}), 403
-    check_low_stock_alerts()
-    return jsonify({'message': 'Stock check completed. Alerts sent if needed.'})
-
-# ============================================
-# INITIALIZE DATABASE
-# ============================================
-
-with app.app_context():
-    db.create_all()
-    
-    # Create default admin user if not exists
-    if not User.query.filter_by(username='admin').first():
-        admin = User(username='admin')
-        admin.set_password('admin123')
-        admin.role = 'admin'
-        db.session.add(admin)
-        db.session.commit()
-        
-        # ============================================
 # USER MANAGEMENT ROUTES
 # ============================================
-
 @app.route('/users')
 @login_required
 def users():
-    """User management page"""
     if current_user.role != 'admin':
         flash('Access denied. Admin privileges required.', 'danger')
         return redirect(url_for('dashboard'))
@@ -702,131 +569,86 @@ def users():
 @app.route('/api/users', methods=['GET'])
 @login_required
 def get_users():
-    """Get all users (admin only)"""
     if current_user.role != 'admin':
         return jsonify({'error': 'Access denied'}), 403
-    
     users = User.query.all()
-    user_list = []
-    for u in users:
-        user_list.append({
-            'id': u.id,
-            'username': u.username,
-            'role': u.role,
-            'is_current': u.id == current_user.id
-        })
+    user_list = [{'id': u.id, 'username': u.username, 'role': u.role, 'is_current': u.id == current_user.id} for u in users]
     return jsonify(user_list)
 
 @app.route('/api/users', methods=['POST'])
 @login_required
 def add_user():
-    """Add new user (admin only)"""
     if current_user.role != 'admin':
         return jsonify({'error': 'Access denied'}), 403
-    
     data = request.json
     username = data.get('username')
     password = data.get('password')
     role = data.get('role', 'cashier')
-    
-    # Check if username exists
     if User.query.filter_by(username=username).first():
         return jsonify({'error': 'Username already exists'}), 400
-    
-    # Create new user
     new_user = User(username=username, role=role)
     new_user.set_password(password)
-    
     db.session.add(new_user)
     db.session.commit()
-    
     return jsonify({'success': True, 'message': 'User created successfully'})
 
 @app.route('/api/users/<int:user_id>', methods=['PUT'])
 @login_required
 def update_user(user_id):
-    """Update user (admin only or own account)"""
     user = User.query.get_or_404(user_id)
-    
-    # Only admin can update other users, or user can update own account
     if current_user.role != 'admin' and current_user.id != user.id:
         return jsonify({'error': 'Access denied'}), 403
-    
     data = request.json
-    
-    # Update username (only if changed and not taken)
     if data.get('username') and data['username'] != user.username:
         if User.query.filter_by(username=data['username']).first():
             return jsonify({'error': 'Username already exists'}), 400
         user.username = data['username']
-    
-    # Update password
     if data.get('password'):
         user.set_password(data['password'])
-    
-    # Update role (only admin can change roles)
     if data.get('role') and current_user.role == 'admin':
         user.role = data['role']
-    
     db.session.commit()
-    
     return jsonify({'success': True, 'message': 'User updated successfully'})
 
 @app.route('/api/users/<int:user_id>', methods=['DELETE'])
 @login_required
 def delete_user(user_id):
-    """Delete user (admin only, cannot delete yourself)"""
     if current_user.role != 'admin':
         return jsonify({'error': 'Access denied'}), 403
-    
     if user_id == current_user.id:
         return jsonify({'error': 'Cannot delete your own account'}), 400
-    
     user = User.query.get_or_404(user_id)
     db.session.delete(user)
     db.session.commit()
-    
     return jsonify({'success': True, 'message': 'User deleted successfully'})
 
 @app.route('/api/change_password', methods=['POST'])
 @login_required
 def change_password():
-    """Change current user's password"""
     data = request.json
     old_password = data.get('old_password')
     new_password = data.get('new_password')
-    
     if not current_user.check_password(old_password):
         return jsonify({'error': 'Current password is incorrect'}), 400
-    
     if len(new_password) < 4:
         return jsonify({'error': 'Password must be at least 4 characters'}), 400
-    
     current_user.set_password(new_password)
     db.session.commit()
-    
     return jsonify({'success': True, 'message': 'Password changed successfully'})
 
 # ============================================
 # ANALYTICS API ENDPOINTS
 # ============================================
-
 @app.route('/api/analytics/sales_trend')
 @login_required
 def sales_trend():
-    """Return daily sales & KPIs for the last 30 days"""
     end_date = datetime.now().date()
     start_date = end_date - timedelta(days=30)
-
-    # Query sales in one go
     sales = Sale.query.filter(Sale.created_at >= start_date).all()
-
-    # Build date range
     dates = []
     amounts = []
     total_sales_30 = 0.0
     transactions_30 = len(sales)
-
     current = start_date
     while current <= end_date:
         dates.append(current.strftime('%Y-%m-%d'))
@@ -834,9 +656,7 @@ def sales_trend():
         amounts.append(day_amount)
         total_sales_30 += day_amount
         current += timedelta(days=1)
-
     avg_transaction = total_sales_30 / transactions_30 if transactions_30 > 0 else 0
-
     return jsonify({
         'dates': dates,
         'amounts': amounts,
@@ -848,19 +668,14 @@ def sales_trend():
 @app.route('/api/analytics/expiry_forecast')
 @login_required
 def expiry_forecast():
-    """Return list of products expiring within the next 90 days"""
     from datetime import date, timedelta
     today = date.today()
     ninety_days = today + timedelta(days=90)
-
     products = Product.query.filter(Product.expiry_date <= ninety_days).all()
-
     forecast = []
     for p in products:
         days_left = (p.expiry_date - today).days
-        # Estimate potential loss: full value if <=30 days, 50% if 31-90 days
         projected_loss = p.price_nle * p.quantity if days_left <= 30 else p.price_nle * p.quantity * 0.5
-
         forecast.append({
             'name': p.name,
             'expiry_date': p.expiry_date.strftime('%Y-%m-%d'),
@@ -868,30 +683,46 @@ def expiry_forecast():
             'quantity': p.quantity,
             'projected_loss': round(projected_loss, 2)
         })
-
-    # Sort by closest expiry first
     forecast.sort(key=lambda x: x['days_left'])
     return jsonify(forecast)
 
 # ============================================
-# RUN THE APP
+# MANUAL STOCK ALERT
 # ============================================
+@app.route('/api/check_low_stock', methods=['POST'])
+@login_required
+def manual_stock_check():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Access denied'}), 403
+    check_low_stock_alerts()
+    return jsonify({'message': 'Stock check completed. Alerts sent if needed.'})
 
-import schedule
-import time
+# ============================================
+# INITIALIZE DATABASE & CREATE ADMIN
+# ============================================
+with app.app_context():
+    db.create_all()
+    if not User.query.filter_by(username='admin').first():
+        admin = User(username='admin')
+        admin.set_password('admin123')
+        admin.role = 'admin'
+        db.session.add(admin)
+        db.session.commit()
 
+# ============================================
+# START BACKGROUND SCHEDULER (OPTIONAL)
+# ============================================
 def run_scheduled_alerts():
-    """Run scheduled tasks in background"""
     while True:
         schedule.run_pending()
         time.sleep(60)
 
-# Schedule stock check every hour
 schedule.every().hour.do(check_low_stock_alerts)
+scheduler_thread = threading.Thread(target=run_scheduled_alerts, daemon=True)
+scheduler_thread.start()
 
-# Start background thread for scheduled tasks
-alert_thread = threading.Thread(target=run_scheduled_alerts, daemon=True)
-alert_thread.start()
-
+# ============================================
+# RUN THE APP
+# ============================================
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=10000)   # Render uses PORT env, but default 5000 is fine.
