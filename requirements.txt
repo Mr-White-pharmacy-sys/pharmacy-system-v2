@@ -13,3 +13,5 @@ Pillow==10.0.0
 python-barcode==0.14.0
 gunicorn==21.2.0
 qrcode[pil]==8.0
+numpy==1.26.4
+pandas==2.2.0
