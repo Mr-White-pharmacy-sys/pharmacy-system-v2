@@ -16,29 +16,11 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.lib.units import inch
-from flask_mail import Mail, Message
-import threading
-import schedule
-import time
 
 # Initialize Flask app
 app = Flask(__name__)
 
-# Email Configuration
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'your-email@gmail.com'      # Replace with your email
-app.config['MAIL_PASSWORD'] = 'your-app-password'        # Replace with app password
-mail = Mail(app)
-
-# SMS Configuration (Twilio - optional; set real values later)
-TWILIO_ACCOUNT_SID = 'your_account_sid'
-TWILIO_AUTH_TOKEN = 'your_auth_token'
-TWILIO_PHONE_NUMBER = '+1234567890'
-ALERT_PHONE_NUMBER = '+23276566295'
-
-app.config['SECRET_KEY'] = 'mr-white-pharmacy-secret-key-2024'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'mr-white-pharmacy-secret-key-2024')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///pharmacy.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
@@ -150,8 +132,7 @@ def generate_receipt_pdf(sale, items):
     table_data = [['Item', 'Qty', 'Price', 'Total']]
     for item in items:
         table_data.append([
-            item['name'],
-            str(item['quantity']),
+            item['name'], str(item['quantity']),
             f"Nle {item['price_nle']:,.2f}",
             f"Nle {item['total_nle']:,.2f}"
         ])
@@ -179,42 +160,6 @@ def generate_receipt_pdf(sale, items):
     story.append(Paragraph("Please check expiry dates before use", styles['Normal']))
     doc.build(story)
     return filepath
-
-# ============================================
-# STOCK ALERT FUNCTIONS (Optional)
-# ============================================
-def check_low_stock_alerts():
-    products = Product.query.all()
-    low_stock_items = [p for p in products if p.quantity < p.low_stock_threshold]
-    if not low_stock_items:
-        return
-    subject = "⚠️ LOW STOCK ALERT - Pharmacy System"
-    body = "The following products are running low:\n\n"
-    for item in low_stock_items:
-        body += f"- {item.name}: Only {item.quantity} left (Threshold: {item.low_stock_threshold})\n"
-    send_email_async(subject, body)
-    send_sms_async(body[:160])
-
-def send_email_async(subject, body):
-    def send():
-        try:
-            msg = Message(subject, sender=app.config['MAIL_USERNAME'], recipients=['manager@phc.sl', 'admin@phc.sl'])
-            msg.body = body
-            mail.send(msg)
-            print("Stock alert email sent")
-        except Exception as e:
-            print(f"Email error: {e}")
-    thread = threading.Thread(target=send)
-    thread.start()
-
-def send_sms_async(message):
-    try:
-        from twilio.rest import Client
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        client.messages.create(body=message, from_=TWILIO_PHONE_NUMBER, to=ALERT_PHONE_NUMBER)
-        print("SMS alert sent")
-    except Exception as e:
-        print(f"SMS error: {e}")
 
 # ============================================
 # PAGE ROUTES
@@ -687,15 +632,16 @@ def expiry_forecast():
     return jsonify(forecast)
 
 # ============================================
-# MANUAL STOCK ALERT
+# MANUAL STOCK ALERT (Placeholder)
 # ============================================
 @app.route('/api/check_low_stock', methods=['POST'])
 @login_required
 def manual_stock_check():
     if current_user.role != 'admin':
         return jsonify({'error': 'Access denied'}), 403
-    check_low_stock_alerts()
-    return jsonify({'message': 'Stock check completed. Alerts sent if needed.'})
+    # Email/SMS alerts are disabled for now.
+    # You can re‑enable them later by adding flask_mail and Twilio credentials.
+    return jsonify({'message': 'Stock check completed. (Email/SMS alerts are currently disabled; add credentials to enable.)'})
 
 # ============================================
 # INITIALIZE DATABASE & CREATE ADMIN
@@ -710,19 +656,7 @@ with app.app_context():
         db.session.commit()
 
 # ============================================
-# START BACKGROUND SCHEDULER (OPTIONAL)
-# ============================================
-def run_scheduled_alerts():
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
-
-schedule.every().hour.do(check_low_stock_alerts)
-scheduler_thread = threading.Thread(target=run_scheduled_alerts, daemon=True)
-scheduler_thread.start()
-
-# ============================================
 # RUN THE APP
 # ============================================
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=10000)   # Render uses PORT env, but default 5000 is fine.
+    app.run(debug=False, host='0.0.0.0', port=10000)
